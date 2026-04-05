@@ -106,6 +106,7 @@ You must return ONLY the raw Python code, without markdown blocks (```python ...
 The code must contain a function with the same entry point name as the original.
 Optimize for extreme speed, vectorization (if using lists/matrices, consider standard Python zip/list comprehensions if numpy isn't imported in the code), and handle the error case properly.
 Important: If the issue is related to adding matrices or lists together element-wise, you MUST add them element-wise, not just concatenate them! For matrices (lists of lists), you must return a new list of lists where each element is the sum of the corresponding elements in the input matrices. e.g. [[a + b for a, b in zip(row_a, row_b)] for row_a, row_b in zip(A, B)]
+Si necesitas mayor eficiencia, puedes importar librerías como numpy o math dentro de la función.
 """
 
         prompt = f"""

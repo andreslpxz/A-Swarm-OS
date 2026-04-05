@@ -11,7 +11,7 @@ class GroqClientWrapper:
         self.client = AsyncGroq(api_key=api_key)
         self.model = model
 
-    async def generate(self, prompt: str, system_prompt: str = "You are an AI assistant.") -> str:
+    async def generate(self, prompt: str, system_prompt: str = "You are an AI assistant. Si necesitas mayor eficiencia, puedes importar librerías como numpy o math dentro de la función.") -> str:
         messages = [
             {
                 "role": "system",
