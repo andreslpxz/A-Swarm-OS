@@ -24,6 +24,25 @@ def calculate_sum(a, b):
 
     manager.register_agent(sum_agent)
 
+    analyst_code = """
+def analyze_sum(matrix_a, matrix_b, result):
+    # A simple validation to see if we just concatenated instead of adding element-wise
+    if isinstance(matrix_a, list) and isinstance(matrix_b, list):
+        if len(result) == len(matrix_a) + len(matrix_b):
+            # This looks like simple list concatenation
+            return False
+    return True
+"""
+
+    analyst_agent = MicroAgent(
+        agent_id="analyst_agent",
+        initial_code=analyst_code,
+        entry_point="analyze_sum",
+        threshold_ms=50.0
+    )
+    manager.register_agent(analyst_agent)
+
+
     print("\n--- Test 1: Simple Integer Sum ---")
     try:
         result = await manager.execute_agent("sum_agent", 5, 10)
@@ -39,29 +58,33 @@ def calculate_sum(a, b):
     print(f"Input B: {matrix_b}")
 
     try:
-        # We manually trigger an RFI here by wrapping in try-catch and throwing ValueError
-        # to ensure it learns matrix addition explicitly if `+` just concatenates lists
-        try:
-            # Check if it just concatenated
-            res = await manager.execute_agent("sum_agent", matrix_a, matrix_b)
-            if res == [[1, 2], [3, 4], [5, 6], [7, 8]]:
-                raise ValueError("List concatenation detected instead of matrix addition!")
-        except Exception as inner_e:
+        # Execute sum agent
+        res = await manager.execute_agent("sum_agent", matrix_a, matrix_b)
+
+        # Use analyst agent to check if the logic is sound
+        is_valid = await manager.execute_agent("analyst_agent", matrix_a, matrix_b, res)
+
+        if not is_valid:
+            print("[Analyst] Detected incorrect logic (List Concatenation instead of Element-wise Addition)!")
             from swarm_os.core.agents import RFIException
-            # Manually throw RFI to force evolution
             agent = manager.agents["sum_agent"]
             await manager.handle_rfi(RFIException(
-                message=str(inner_e),
+                message="List concatenation detected instead of matrix addition!",
                 trigger_reason="Incapacidad Logística (List Concatenation instead of Matrix Addition)",
                 agent_id="sum_agent",
                 code=agent.code,
-                kwargs={'args': (matrix_a, matrix_b), 'error': str(inner_e)}
+                kwargs={'args': (matrix_a, matrix_b), 'error': "Analyst agent rejected the result"}
             ))
+            # Retry after evolution
+            res = await manager.execute_agent("sum_agent", matrix_a, matrix_b)
 
-        result = await manager.execute_agent("sum_agent", matrix_a, matrix_b)
+        result = res
         print(f"Final Result after Evolution: {result}")
     except Exception as e:
         print(f"Final Failure: {e}")
+
+    # Save memory to persist state
+    manager.memory.save()
 
 if __name__ == "__main__":
     asyncio.run(main())

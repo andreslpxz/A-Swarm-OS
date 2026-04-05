@@ -1,4 +1,7 @@
 import numpy as np
+import json
+import os
+import base64
 import networkx as nx
 from typing import Dict, List, Optional, Any, Set
 from sentence_transformers import SentenceTransformer
@@ -34,6 +37,7 @@ class FractalGraphMemory:
         self.graph = nx.DiGraph()
         self.nodes: Dict[str, FractalNode] = {}
         self.embedding_model = EmbeddingSingleton()
+        self.load()
 
     def add_node(self, id: str, content: str, metadata: Dict[str, Any] = None, parent_id: Optional[str] = None):
         if metadata is None:
@@ -104,3 +108,55 @@ class FractalGraphMemory:
         self.graph.nodes[parent_id]['embedding'] = parent_node.embedding
 
         return summary
+
+    def save(self, filepath: str = "memory.json"):
+        data = {}
+        for node_id, node in self.nodes.items():
+            # Convert embedding to base64 string
+            emb_bytes = node.embedding.tobytes()
+            emb_b64 = base64.b64encode(emb_bytes).decode('utf-8')
+            data[node_id] = {
+                "id": node.id,
+                "content": node.content,
+                "embedding_b64": emb_b64,
+                "embedding_shape": node.embedding.shape,
+                "embedding_dtype": str(node.embedding.dtype),
+                "metadata": node.metadata,
+                "parent_id": node.parent_id,
+                "children_ids": list(node.children_ids),
+                "is_compressed": node.is_compressed
+            }
+        with open(filepath, 'w') as f:
+            json.dump(data, f)
+        print(f"Memory saved to {filepath}")
+
+    def load(self, filepath: str = "memory.json"):
+        if not os.path.exists(filepath):
+            return
+
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+
+        for node_id, node_data in data.items():
+            emb_bytes = base64.b64decode(node_data["embedding_b64"])
+            embedding = np.frombuffer(emb_bytes, dtype=np.dtype(node_data["embedding_dtype"])).copy()
+            embedding = embedding.reshape(node_data["embedding_shape"])
+
+            node = FractalNode(
+                id=node_data["id"],
+                content=node_data["content"],
+                embedding=embedding,
+                metadata=node_data["metadata"],
+                parent_id=node_data["parent_id"],
+                children_ids=set(node_data["children_ids"]),
+                is_compressed=node_data["is_compressed"]
+            )
+            self.nodes[node_id] = node
+            self.graph.add_node(node_id, embedding=embedding, content=node.content)
+
+        # Reconstruct edges
+        for node_id, node in self.nodes.items():
+            for child_id in node.children_ids:
+                if child_id in self.nodes:
+                    self.graph.add_edge(node_id, child_id)
+        print(f"Memory loaded from {filepath}")
